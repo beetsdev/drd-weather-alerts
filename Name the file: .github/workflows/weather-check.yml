@@ -1,0 +1,30 @@
+name: Check Weather Alerts
+
+on:
+  schedule:
+    # Runs every hour at :05 past the hour (Eastern time)
+    - cron: '5 * * * *'
+  workflow_dispatch: # Allows manual testing
+
+jobs:
+  check-weather:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        pip install requests
+    
+    - name: Check for weather alerts
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      run: |
+        python weather_check.py

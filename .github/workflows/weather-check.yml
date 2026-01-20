@@ -10,69 +10,26 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-    
-    - name: Install dependencies
-      run: |
-        pip install requests
-    
-    - name: Check for weather alerts
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      run: |
-        python weather_check.py
-    
-    - name: Commit updated alert tracking
-      run: |
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "github-actions[bot]"
-        git add posted_alerts.txt
-        git diff --quiet && git diff --staged --quiet || git commit -m "Update posted alerts tracking"
-        git push
-```
-
-5. Click **"Commit changes"**
-6. Click **"Commit changes"** again
-
----
-
-## Step 3: Create the Tracking File
-
-1. Go back to your repo home page
-2. Click **"Add file"** → **"Create new file"**
-3. Name: `posted_alerts.txt`
-4. Leave it **completely empty** (don't type anything)
-5. Scroll down, click **"Commit changes"**
-6. Click **"Commit changes"** again
-
----
-
-## Step 4: Test It!
-
-1. Go to **Actions** tab
-2. Click **"Check Weather Alerts"** in left sidebar
-3. Click **"Run workflow"** dropdown (top right)
-4. Click green **"Run workflow"** button
-5. Wait ~30 seconds, then click on the workflow run
-6. Click **"check-weather"** to see logs
-
-**What you should see:**
-```
-Checking for weather alerts...
-Tracking 0 previously posted alerts
-No new important alerts found
-```
-
-**Or if there are alerts:**
-```
-Checking for weather alerts...
-Tracking 0 previously posted alerts
-Found 1 NEW important alert(s)
-Successfully sent alert to Slack
-Marked 1 alert(s) as posted
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install requests
+      
+      - name: Check for weather alerts
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python weather_check.py
+      
+      - name: Commit updated alert tracking
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add posted_alerts.txt
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update posted alerts tracking"
+          git push

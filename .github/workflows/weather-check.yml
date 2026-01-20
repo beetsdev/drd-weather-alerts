@@ -1,6 +1,8 @@
 name: Check Weather Alerts
 
 on:
+  schedule:
+    - cron: '5 * * * *'
   workflow_dispatch:
   push:
     branches:
@@ -30,22 +32,10 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: python weather_check.py
       
-      - name: Update tracking and schedule next run
+      - name: Commit updated alert tracking
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
-          # Update last run timestamp
-          echo "$(date -u +"%Y-%m-%d %H:%M:%S UTC")" > .last_run
-          
-          # Add both files
-          git add posted_alerts.txt .last_run
-          
-          # Commit if there are changes
-          git diff --quiet && git diff --staged --quiet || git commit -m "Automated weather check"
-          
-          # Wait 1 hour before pushing (triggers next run)
-          echo "Waiting 1 hour before next check..."
-          sleep 3600
-          
+          git add posted_alerts.txt
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update posted alerts tracking"
           git push

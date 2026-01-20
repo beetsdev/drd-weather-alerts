@@ -1,15 +1,16 @@
 import os
 import json
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Configuration
 NWS_API_URL = "https://api.weather.gov/alerts/active"
 SLACK_WEBHOOK_URL = os.environ.get('SLACK_WEBHOOK_URL')
+POSTED_ALERTS_FILE = 'posted_alerts.txt'
 
 # Detroit metro area zones
 PARAMS = {
-    'zone': 'MIZ075,MIZ076,MIZ082,MIZ083',  # Wayne, Oakland, Macomb, Washtenaw
+    'zone': 'MIZ075,MIZ076,MIZ082,MIZ083',
     'status': 'actual'
 }
 
@@ -19,6 +20,32 @@ HEADERS = {
 
 # Alert severity levels to monitor
 IMPORTANT_SEVERITY = ['Extreme', 'Severe', 'Moderate']
+
+def load_posted_alerts():
+    """Load list of already-posted alert IDs"""
+    try:
+        with open(POSTED_ALERTS_FILE, 'r') as f:
+            return set(line.strip() for line in f if line.strip())
+    except FileNotFoundError:
+        return set()
+
+def save_posted_alert(alert_id):
+    """Save an alert ID as posted"""
+    with open(POSTED_ALERTS_FILE, 'a') as f:
+        f.write(f"{alert_id}\n")
+
+def clean_old_alerts():
+    """Remove alert IDs older than 7 days from tracking file"""
+    try:
+        with open(POSTED_ALERTS_FILE, 'r') as f:
+            lines = f.readlines()
+        
+        # Keep last 100 alerts (roughly 4 days worth)
+        if len(lines) > 100:
+            with open(POSTED_ALERTS_FILE, 'w') as f:
+                f.writelines(lines[-100:])
+    except FileNotFoundError:
+        pass
 
 def format_timestamp(iso_time):
     """Convert ISO timestamp to readable format"""
@@ -38,22 +65,24 @@ def check_alerts():
         print(f"Error fetching alerts: {e}")
         return None
 
-def filter_important_alerts(data):
-    """Filter for severe/important alerts only"""
+def filter_important_alerts(data, posted_alerts):
+    """Filter for severe/important alerts that haven't been posted yet"""
     if not data or 'features' not in data:
         return []
     
     alerts = data['features']
-    important = []
+    new_important = []
     
     for alert in alerts:
         props = alert.get('properties', {})
         severity = props.get('severity')
+        alert_id = props.get('id')  # Unique ID from NWS
         
-        if severity in IMPORTANT_SEVERITY:
-            important.append(props)
+        # Check if important and not already posted
+        if severity in IMPORTANT_SEVERITY and alert_id not in posted_alerts:
+            new_important.append(props)
     
-    return important
+    return new_important
 
 def format_slack_message(alerts):
     """Format alerts into Slack message"""
@@ -61,7 +90,7 @@ def format_slack_message(alerts):
         return None
     
     alert_count = len(alerts)
-    header = f"🌤️ *{alert_count} Active Weather Alert{'s' if alert_count > 1 else ''}*\n\n"
+    header = f"🌤️ *{alert_count} New Weather Alert{'s' if alert_count > 1 else ''}*\n\n"
     
     alert_blocks = []
     
@@ -94,13 +123,11 @@ def format_slack_message(alerts):
         alert_text += f"*{headline}*"
         
         if instruction:
-            # Truncate long instructions
             inst = instruction[:400] + "..." if len(instruction) > 400 else instruction
             alert_text += f"\n\n📋 *What to do:*\n{inst}"
         
         alert_blocks.append(alert_text)
     
-    # Combine all alerts
     combined = "\n\n────────────────────────────\n\n".join(alert_blocks)
     
     return {
@@ -132,25 +159,37 @@ def send_to_slack(message):
 def main():
     print("Checking for weather alerts...")
     
-    # Fetch alerts
+    # Load previously posted alerts
+    posted_alerts = load_posted_alerts()
+    print(f"Tracking {len(posted_alerts)} previously posted alerts")
+    
+    # Clean old alerts from tracking
+    clean_old_alerts()
+    
+    # Fetch current alerts
     data = check_alerts()
     if not data:
         print("Failed to fetch alert data")
         return
     
-    # Filter important alerts
-    important_alerts = filter_important_alerts(data)
+    # Filter for new important alerts
+    new_alerts = filter_important_alerts(data, posted_alerts)
     
-    if not important_alerts:
-        print("No important alerts found")
+    if not new_alerts:
+        print("No new important alerts found")
         return
     
-    print(f"Found {len(important_alerts)} important alert(s)")
+    print(f"Found {len(new_alerts)} NEW important alert(s)")
     
     # Format and send to Slack
-    message = format_slack_message(important_alerts)
-    if message:
-        send_to_slack(message)
+    message = format_slack_message(new_alerts)
+    if message and send_to_slack(message):
+        # Mark these alerts as posted
+        for props in new_alerts:
+            alert_id = props.get('id')
+            if alert_id:
+                save_posted_alert(alert_id)
+        print(f"Marked {len(new_alerts)} alert(s) as posted")
 
 if __name__ == "__main__":
     main()

@@ -196,7 +196,7 @@ Red X marks = needs attention ❌
 
 ## 👥 Contact
 
-**Maintained by:** [Your Name]  
+**Maintained by:** Oi!
 **Questions?** Post in #weather or DM the maintainer
 
 ## 📄 License

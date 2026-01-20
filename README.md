@@ -6,7 +6,7 @@ Automated weather alert system that monitors National Weather Service alerts for
 
 - Checks NWS API every hour for active weather alerts
 - Filters for severe/important alerts only (Extreme, Severe, Moderate)
-- Posts formatted alerts to Slack #weather channel
+- **Posts each unique alert only once** (no duplicate notifications)
 - Monitors Wayne, Oakland, Macomb, and Washtenaw counties
 - Runs completely free on GitHub Actions
 
@@ -14,9 +14,25 @@ Automated weather alert system that monitors National Weather Service alerts for
 
 1. **GitHub Actions** runs on a schedule (every hour at :05 past the hour)
 2. **Python script** (`weather_check.py`) fetches alerts from NWS API
-3. **Filters** alerts by severity and location
-4. **Posts** to Slack via webhook when alerts are found
-5. **Logs** results in GitHub Actions for debugging
+3. **Checks alert IDs** against tracking file to avoid duplicates
+4. **Filters** alerts by severity and location
+5. **Posts** to Slack via webhook only for NEW alerts
+6. **Updates tracking file** (`posted_alerts.txt`) with posted alert IDs
+7. **Logs** results in GitHub Actions for debugging
+
+## 🔄 Deduplication System
+
+The bot tracks every alert it posts using unique NWS alert IDs:
+
+- Each NWS alert has a unique ID (like `urn:oid:2.49.0.1.840.0.abc123...`)
+- When an alert is posted, its ID is saved to `posted_alerts.txt`
+- Future checks skip any alert ID already in the file
+- **Result: Each alert posts exactly once, no spam!**
+
+Even if:
+- An alert is active for 12 hours → only posts once
+- NWS updates/amends an alert → still won't re-post
+- You manually run the workflow → won't duplicate
 
 ## 📁 Repository Structure
 ```
@@ -25,8 +41,11 @@ drd-weather-alerts/
 │   └── workflows/
 │       └── weather-check.yml    # GitHub Actions workflow configuration
 ├── weather_check.py              # Main Python script
+├── posted_alerts.txt             # Tracks posted alert IDs (auto-updated)
 └── README.md                     # This file
 ```
+
+**Note:** `posted_alerts.txt` is automatically updated by GitHub Actions. You should never need to edit it manually.
 
 ## 🔧 Configuration
 
@@ -119,14 +138,24 @@ If you need to regenerate the Slack webhook:
 **When there are NO alerts:**
 ```
 Checking for weather alerts...
-No important alerts found
+Tracking X previously posted alerts
+No new important alerts found
 ```
 
-**When there ARE alerts:**
+**When there ARE NEW alerts:**
 ```
 Checking for weather alerts...
-Found 2 important alert(s)
+Tracking X previously posted alerts
+Found 1 NEW important alert(s)
 Successfully sent alert to Slack
+Marked 1 alert(s) as posted
+```
+
+**When alerts are active but already posted:**
+```
+Checking for weather alerts...
+Tracking X previously posted alerts
+No new important alerts found
 ```
 
 ## 🐛 Troubleshooting
@@ -142,6 +171,7 @@ Successfully sent alert to Slack
    YOUR_WEBHOOK_URL
 ```
 4. Run manual test (see Testing section)
+5. Check if alerts exist at https://www.weather.gov/dtx/
 
 ### Getting alerts for wrong area
 
@@ -153,32 +183,65 @@ Successfully sent alert to Slack
 - Adjust `IMPORTANT_SEVERITY` list in `weather_check.py`
 - Current setting includes Extreme, Severe, and Moderate
 
-### Alerts posting at wrong time
+### Duplicate alerts posting
 
-- Remember cron times are UTC, not Eastern time
-- 5 PM Eastern = 10 PM UTC (EST) or 9 PM UTC (EDT)
+- Check that `posted_alerts.txt` exists in the repo
+- Verify workflow has `permissions: contents: write`
+- Check Actions logs to confirm tracking file is being updated
+- View `posted_alerts.txt` to see tracked alert IDs
+
+### Workflow fails with "exit code 128"
+
+- GitHub Actions needs write permissions
+- Verify workflow file has `permissions: contents: write` at the top
+
+### `posted_alerts.txt` getting too large
+
+- The script automatically cleans old entries (keeps last 100)
+- File should stay under 10KB
+- No manual cleanup needed
 
 ## 📊 Monitoring
 
-Check the **Actions** tab regularly to ensure:
+### Check the Actions Tab Regularly
+
+Ensure:
 - Workflow is running on schedule (every hour)
 - No errors in recent runs
 - Python script is executing successfully
+- Tracking file is being updated
 
 Green checkmarks = all good ✅  
 Red X marks = needs attention ❌
+
+### Failure Notifications
+
+GitHub will email you when workflows fail. Make sure:
+1. Go to https://github.com/settings/notifications
+2. Under **Actions**, verify:
+   - ✅ "Send notifications for failed workflows only"
+   - ✅ Email is selected
 
 ## 🔄 Maintenance
 
 ### Regular Maintenance
 
 - **None required!** This runs automatically
+- Tracking file cleans itself automatically
 
 ### Occasional Updates
 
 - Update Python version in workflow if needed
 - Adjust alert criteria based on feedback
 - Modify coverage area if DRD moves practice locations
+- Clean up very old alert IDs (automatically done, but can be manual)
+
+### Resetting Alert Tracking
+
+If you want to clear all tracked alerts (e.g., for testing):
+1. Delete all contents of `posted_alerts.txt`
+2. Commit the empty file
+3. Next run will post any currently active alerts
 
 ## 📚 Resources
 
